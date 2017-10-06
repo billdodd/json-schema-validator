@@ -1,19 +1,27 @@
-import getopt
+import argparse
 import json
 import jsonschema
 import sys
 
 
-def display_usage(program):
-    print("Usage: {} -j <json-filename> -s <schema-filename>".format(program))
-
-
 def open_and_load_json(filename):
+    """
+    Open a JSON file, load it and return the JSON object as a dict
+    :param filename: JSON filename
+    :return: JSON object as a dict
+    """
     with open(filename) as json_file:
         return json.load(json_file)
 
 
-def validate_json(json_data, schema_data):
+def validate_json(validator, json_data, schema_data):
+    """
+    Validate a JSON data payload against a JSON schema
+    :param validator: jsonschema validation method to use
+    :param json_data: JSON data payload to validate
+    :param schema_data: JSON schema to validate against
+    :return: 0 for success, 1 for failure
+    """
     if json_data is None:
         print("JSON payload is empty", file=sys.stderr)
         return 1
@@ -21,7 +29,7 @@ def validate_json(json_data, schema_data):
         print("JSON schema is empty", file=sys.stderr)
         return 1
     try:
-        jsonschema.validate(json_data, schema_data)
+        validator(json_data, schema_data)
     except jsonschema.ValidationError as e:
         print("JSON validation error: {}".format(e.message), file=sys.stderr)
         return 1
@@ -33,56 +41,34 @@ def validate_json(json_data, schema_data):
         return 0
 
 
-def main(argv):
+def main():
     """
     main
     """
 
-    json_filename = ""
-    schema_filename = ""
+    parser = argparse.ArgumentParser(description='Validate a JSON payload against a JSON schema')
+    parser.add_argument('schema_filename', help='filename of JSON schema')
+    parser.add_argument('json_filename', help='filename of JSON payload')
+    group1 = parser.add_mutually_exclusive_group()
+    group1.add_argument('-3', '--draft3', action='store_true', help='use JSON draft-3 validator')
+    group1.add_argument('-4', '--draft4', action='store_true', help='use JSON draft-4 validator')
 
-    try:
-        opts, args = getopt.gnu_getopt(argv[1:], "j:s:", ["json=", "schema="])
-    except getopt.GetoptError:
-        print("Error parsing options", file=sys.stderr)
-        display_usage(argv[0])
-        sys.exit(1)
+    args = parser.parse_args()
 
-    if len(opts) != 2:
-        display_usage(argv[0])
-        sys.exit(1)
+    if args.draft3:
+        validator = jsonschema.Draft3Validator
+    elif args.draft4:
+        validator = jsonschema.Draft4Validator
+    else:
+        validator = jsonschema.validate
 
-    for opt, arg in opts:
-        if opt in ("-j", "--json"):
-            json_filename = arg
-        elif opt in ("-s", "--schema"):
-            schema_filename = arg
-        else:
-            display_usage(argv[0])
-            sys.exit(1)
+    json_data = open_and_load_json(args.json_filename)
+    schema_data = open_and_load_json(args.schema_filename)
 
-    if len(args) > 0:
-        print("Extra args found: {}".format(args), file=sys.stderr)
-        display_usage(argv[0])
-        sys.exit(1)
-
-    if len(json_filename) == 0:
-        print("JSON filename missing", file=sys.stderr)
-        display_usage(argv[0])
-        sys.exit(1)
-
-    if len(schema_filename) == 0:
-        print("Schema filename missing", file=sys.stderr)
-        display_usage(argv[0])
-        sys.exit(1)
-
-    json_data = open_and_load_json(json_filename)
-    schema_data = open_and_load_json(schema_filename)
-
-    rc = validate_json(json_data, schema_data)
+    rc = validate_json(validator, json_data, schema_data)
 
     exit(rc)
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()
